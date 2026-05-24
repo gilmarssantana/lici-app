@@ -14,7 +14,32 @@ Funções implementadas:
 - gerar espelho Markdown por tipo;
 - preparar interface de serviço para futura migração PostgreSQL.
 
-## Executar
+## Configuração
+
+A LICI agora possui uma camada central de configuração em `backend/app/core/config.py`.
+
+Templates versionáveis:
+
+- `config/lici.env.example` — portas, URLs, caminhos e política de backup.
+- `config/postgres.env.example` — formato esperado do segredo PostgreSQL.
+
+Arquivos locais reais:
+
+- `/root/lici-app/config/lici.env`
+- `/root/lici-app/secrets/postgres.env`
+
+Regras:
+
+- `config/lici.env` é local e não deve ir para o Git.
+- `secrets/postgres.env` é segredo e não deve ir para o Git.
+- `GET /health/full` valida se os templates existem, se o arquivo local existe, se `secrets/postgres.env` existe e se as portas internas não conflitam.
+
+Para recriar o arquivo local:
+
+```bash
+cp /root/lici-app/config/lici.env.example /root/lici-app/config/lici.env
+chmod 600 /root/lici-app/config/lici.env
+```
 
 API principal modular:
 
@@ -152,6 +177,12 @@ Backup e restauração:
 Exemplo de validação de restore:
 
 ```bash
+/root/lici-app/scripts/restore_lici.sh --archive latest --pg-dump latest
+```
+
+Também é possível informar arquivos específicos:
+
+```bash
 /root/lici-app/scripts/restore_lici.sh \
   --archive /root/backups/lici/lici-backup-YYYYmmdd-HHMM.tar.gz \
   --pg-dump /root/backups/lici/postgres/lici-YYYYmmdd-HHMM.sql.gz
@@ -160,9 +191,7 @@ Exemplo de validação de restore:
 Restauração real exige confirmação explícita:
 
 ```bash
-CONFIRM_RESTORE_LICI=YES /root/lici-app/scripts/restore_lici.sh --apply \
-  --archive /root/backups/lici/lici-backup-YYYYmmdd-HHMM.tar.gz \
-  --pg-dump /root/backups/lici/postgres/lici-YYYYmmdd-HHMM.sql.gz
+CONFIRM_RESTORE_LICI=YES /root/lici-app/scripts/restore_lici.sh --apply --archive latest --pg-dump latest
 ```
 
 Observação crítica: GitHub protege o código. Backups protegem dados reais, documentos, banco e credenciais locais. Para desastre total da VPS, é necessário copiar `/root/backups/lici` para armazenamento externo seguro.

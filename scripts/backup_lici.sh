@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-BACKUP_DIR="/root/backups/lici"
+APP_ROOT="${LICI_APP_ROOT:-/root/lici-app}"
+APP_ENV="$APP_ROOT/config/lici.env"
+if [[ -f "$APP_ENV" ]]; then
+  # shellcheck disable=SC1090
+  source "$APP_ENV"
+fi
+
+BACKUP_DIR="${LICI_BACKUP_ROOT:-/root/backups/lici}"
 POSTGRES_BACKUP_DIR="$BACKUP_DIR/postgres"
 STAMP="$(date +%Y%m%d-%H%M)"
 ARCHIVE="$BACKUP_DIR/lici-backup-$STAMP.tar.gz"
 PG_DUMP_FILE="$POSTGRES_BACKUP_DIR/lici-$STAMP.sql.gz"
 MANIFEST="$BACKUP_DIR/lici-backup-$STAMP.manifest.json"
 LOG_FILE="$BACKUP_DIR/backup.log"
-AUDIT_LOG="/root/lici-app/audit/audit.log"
-POSTGRES_ENV="/root/lici-app/secrets/postgres.env"
-OBS_LOG_DIR="/root/lici-app/logs"
+AUDIT_LOG="${LICI_AUDIT_LOG:-/root/lici-app/audit/audit.log}"
+POSTGRES_ENV="${LICI_SECRETS_ROOT:-/root/lici-app/secrets}/postgres.env"
+OBS_LOG_DIR="${LICI_LOGS_ROOT:-/root/lici-app/logs}"
+KEEP_COUNT="${LICI_BACKUP_KEEP_COUNT:-7}"
 
 mkdir -p "$BACKUP_DIR" "$POSTGRES_BACKUP_DIR" "$(dirname "$AUDIT_LOG")" "$OBS_LOG_DIR"
 
@@ -75,7 +83,7 @@ structured_log() {
   local status="$1"
   local event="$2"
   local details="$3"
-  PYTHONPATH=/root/lici-app/backend /root/lici-app/backend/venv/bin/python - "$status" "$event" "$details" <<'PY' || true
+  PYTHONPATH="$APP_ROOT/backend" "$APP_ROOT/backend/venv/bin/python" - "$status" "$event" "$details" <<'PY' || true
 import json, sys
 from app.services.observability import structured_log
 status, event, details = sys.argv[1:4]
@@ -90,8 +98,8 @@ PY
 trap 'code=$?; audit_event "erro" "backup falhou com exit code ${code}"; structured_log "erro" "backup_failed" "{\"exit_code\":${code},\"arquivo\":\"${ARCHIVE}\",\"postgres_dump\":\"${PG_DUMP_FILE}\"}"; exit $code' ERR
 
 INCLUDES=(
-  "/root/lici-app"
-  "/root/lici-docs"
+  "$APP_ROOT"
+  "${LICI_DOCS_ROOT:-/root/lici-docs}"
   "/root/agente-licitacoes"
   "/etc/nginx/sites-available/lici"
   "$PG_DUMP_FILE"
@@ -148,14 +156,14 @@ done
   tar \
     --ignore-failed-read \
     --warning=no-file-changed \
-    --exclude='/root/lici-app/frontend/node_modules' \
-    --exclude='/root/lici-app/frontend/dist' \
-    --exclude='/root/lici-app/backend/.venv' \
-    --exclude='/root/lici-app/backend/venv' \
+    --exclude="$APP_ROOT/frontend/node_modules" \
+    --exclude="$APP_ROOT/frontend/dist" \
+    --exclude="$APP_ROOT/backend/.venv" \
+    --exclude="$APP_ROOT/backend/venv" \
     --exclude='/root/agente-licitacoes/venv' \
     --exclude='/root/agente-licitacoes/.venv' \
     --exclude='/root/agente-licitacoes/__pycache__' \
-    --exclude='/root/lici-app/.lici_basic_auth_credentials' \
+    --exclude="$APP_ROOT/.lici_basic_auth_credentials" \
     -czf "$ARCHIVE" \
     "${INCLUDES[@]}"
 
@@ -166,21 +174,21 @@ done
   write_manifest
   echo "Manifesto criado: $MANIFEST"
 
-  mapfile -t old_backups < <(ls -1t "$BACKUP_DIR"/lici-backup-*.tar.gz 2>/dev/null | tail -n +8)
+  mapfile -t old_backups < <(ls -1t "$BACKUP_DIR"/lici-backup-*.tar.gz 2>/dev/null | tail -n +"$((KEEP_COUNT + 1))")
   if (( ${#old_backups[@]} > 0 )); then
     printf 'Removendo backups antigos:\n'
     printf ' - %s\n' "${old_backups[@]}"
     rm -f "${old_backups[@]}"
   fi
 
-  mapfile -t old_pg_dumps < <(ls -1t "$POSTGRES_BACKUP_DIR"/lici-*.sql.gz 2>/dev/null | tail -n +8)
+  mapfile -t old_pg_dumps < <(ls -1t "$POSTGRES_BACKUP_DIR"/lici-*.sql.gz 2>/dev/null | tail -n +"$((KEEP_COUNT + 1))")
   if (( ${#old_pg_dumps[@]} > 0 )); then
     printf 'Removendo dumps PostgreSQL antigos:\n'
     printf ' - %s\n' "${old_pg_dumps[@]}"
     rm -f "${old_pg_dumps[@]}"
   fi
 
-  mapfile -t old_manifests < <(ls -1t "$BACKUP_DIR"/lici-backup-*.manifest.json 2>/dev/null | tail -n +8)
+  mapfile -t old_manifests < <(ls -1t "$BACKUP_DIR"/lici-backup-*.manifest.json 2>/dev/null | tail -n +"$((KEEP_COUNT + 1))")
   if (( ${#old_manifests[@]} > 0 )); then
     printf 'Removendo manifestos antigos:\n'
     printf ' - %s\n' "${old_manifests[@]}"

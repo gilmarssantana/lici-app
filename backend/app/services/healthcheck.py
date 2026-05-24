@@ -11,12 +11,14 @@ from typing import Any
 from urllib.error import URLError
 from urllib.request import urlopen
 
+from app.core.config import settings
 from app.services.audit_log import audit_event
 
 
 class LiciHealthcheckService:
     def full(self) -> dict[str, Any]:
         components: list[dict[str, Any]] = []
+        components.extend(self._configuration_components())
         components.extend(self._http_components())
         components.extend(self._directory_components())
         components.extend(self._json_components())
@@ -48,20 +50,66 @@ class LiciHealthcheckService:
 
     def _http_components(self) -> list[dict[str, Any]]:
         checks = [
-            ("api_principal", "http://127.0.0.1:8100/health", {200}),
-            ("memory_core", "http://127.0.0.1:8010/", {200}),
-            ("frontend", "http://127.0.0.1:5173/", {200}),
+            ("api_principal", f"{settings.api_url}/health", {200}),
+            ("memory_core", f"{settings.memory_core_url}/", {200}),
+            ("frontend", f"{settings.frontend_url}/", {200}),
             # Rotas protegidas por JWT podem retornar 401 sem token; isso confirma que a API respondeu.
-            ("dashboard", "http://127.0.0.1:8100/dashboard/resumo", {200, 401}),
-            ("radar", "http://127.0.0.1:8100/radar/engine", {200, 401}),
-            ("triage", "http://127.0.0.1:8100/triagem/engine", {200, 401}),
-            ("alertas", "http://127.0.0.1:8100/alertas/engine", {200, 401}),
-            ("casos", "http://127.0.0.1:8100/casos/engine", {200, 401}),
-            ("scheduler", "http://127.0.0.1:8100/scheduler/status", {200}),
-            ("fornecedor_full", "http://127.0.0.1:8100/fornecedor-full/engine", {200, 401}),
-            ("consultor_full", "http://127.0.0.1:8100/consultor-full/engine", {200, 401}),
+            ("dashboard", f"{settings.api_url}/dashboard/resumo", {200, 401}),
+            ("radar", f"{settings.api_url}/radar/engine", {200, 401}),
+            ("triage", f"{settings.api_url}/triagem/engine", {200, 401}),
+            ("alertas", f"{settings.api_url}/alertas/engine", {200, 401}),
+            ("casos", f"{settings.api_url}/casos/engine", {200, 401}),
+            ("scheduler", f"{settings.api_url}/scheduler/status", {200}),
+            ("fornecedor_full", f"{settings.api_url}/fornecedor-full/engine", {200, 401}),
+            ("consultor_full", f"{settings.api_url}/consultor-full/engine", {200, 401}),
         ]
         return [self._http_check(name, url, expected_codes) for name, url, expected_codes in checks]
+
+    def _configuration_components(self) -> list[dict[str, Any]]:
+        components = [
+            self._component(
+                "config:settings",
+                "ok",
+                "Configuração central carregada",
+                settings.public_snapshot(),
+            )
+        ]
+        app_env = settings.app_root / "config" / "lici.env"
+        app_env_example = settings.app_root / "config" / "lici.env.example"
+        pg_example = settings.app_root / "config" / "postgres.env.example"
+        components.append(self._component(
+            "config:lici_env_example",
+            "ok" if app_env_example.exists() else "erro",
+            "Template versionável existe" if app_env_example.exists() else "Template config/lici.env.example ausente",
+            {"path": str(app_env_example)},
+        ))
+        components.append(self._component(
+            "config:postgres_env_example",
+            "ok" if pg_example.exists() else "erro",
+            "Template PostgreSQL versionável existe" if pg_example.exists() else "Template config/postgres.env.example ausente",
+            {"path": str(pg_example)},
+        ))
+        components.append(self._component(
+            "config:lici_env_local",
+            "ok" if app_env.exists() else "alerta",
+            "Arquivo local config/lici.env encontrado" if app_env.exists() else "Arquivo local config/lici.env ausente; usando defaults seguros",
+            {"path": str(app_env)},
+        ))
+        components.append(self._component(
+            "config:postgres_env_local",
+            "ok" if settings.postgres_env_file.exists() else "erro",
+            "Arquivo secrets/postgres.env encontrado" if settings.postgres_env_file.exists() else "Arquivo secrets/postgres.env ausente",
+            {"path": str(settings.postgres_env_file)},
+        ))
+        ports = [settings.api_port, settings.memory_port, settings.frontend_port, settings.rag_port]
+        duplicate_ports = len(set(ports)) != len(ports)
+        components.append(self._component(
+            "config:ports",
+            "erro" if duplicate_ports else "ok",
+            "Portas duplicadas na configuração" if duplicate_ports else "Portas internas sem conflito",
+            {"api": settings.api_port, "memory": settings.memory_port, "frontend": settings.frontend_port, "rag": settings.rag_port},
+        ))
+        return components
 
     def _http_check(self, name: str, url: str, expected_codes: set[int] | None = None) -> dict[str, Any]:
         expected_codes = expected_codes or set(range(200, 300))
@@ -80,15 +128,15 @@ class LiciHealthcheckService:
 
     def _directory_components(self) -> list[dict[str, Any]]:
         dirs = [
-            "/root/lici-app",
-            "/root/lici-docs",
+            str(settings.app_root),
+            str(settings.docs_root),
             "/root/lici-app/radar",
             "/root/lici-app/triagem",
             "/root/lici-app/alertas",
             "/root/lici-app/casos_vivos",
             "/root/lici-app/scheduler",
             "/root/lici-app/memoria_viva",
-            "/root/backups/lici",
+            str(settings.backup_root),
             "/root/lici-app/fornecedor_full",
             "/root/lici-app/consultor_full",
             "/root/lici-app/company_documents",
@@ -270,12 +318,12 @@ class LiciHealthcheckService:
 
 
     def _backup_components(self) -> list[dict[str, Any]]:
-        backup_dir = Path("/root/backups/lici")
+        backup_dir = settings.backup_root
         pg_dir = backup_dir / "postgres"
         components = []
-        components.append(self._latest_file_component("backup:archive", backup_dir, "lici-backup-*.tar.gz", max_age_hours=36, min_bytes=1024 * 1024))
-        components.append(self._latest_file_component("backup:postgres_dump", pg_dir, "lici-*.sql.gz", max_age_hours=36, min_bytes=1024))
-        manifest = self._latest_file_component("backup:manifest", backup_dir, "lici-backup-*.manifest.json", max_age_hours=36, min_bytes=100)
+        components.append(self._latest_file_component("backup:archive", backup_dir, "lici-backup-*.tar.gz", max_age_hours=settings.backup_max_age_hours, min_bytes=1024 * 1024))
+        components.append(self._latest_file_component("backup:postgres_dump", pg_dir, "lici-*.sql.gz", max_age_hours=settings.backup_max_age_hours, min_bytes=1024))
+        manifest = self._latest_file_component("backup:manifest", backup_dir, "lici-backup-*.manifest.json", max_age_hours=settings.backup_max_age_hours, min_bytes=100)
         components.append(manifest)
         latest_manifest = self._latest_file(backup_dir, "lici-backup-*.manifest.json")
         if latest_manifest:
@@ -320,7 +368,7 @@ class LiciHealthcheckService:
 
     def _postgres_components(self) -> list[dict[str, Any]]:
         dsn = os.getenv("LICI_DATABASE_URL")
-        path = Path("/root/lici-app/secrets/postgres.env")
+        path = settings.postgres_env_file
         if not dsn and path.exists():
             for line in path.read_text(encoding="utf-8").splitlines():
                 if line.startswith("LICI_DATABASE_URL="):

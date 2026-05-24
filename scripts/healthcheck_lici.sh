@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-LOG_DIR="/root/lici-app/health"
+APP_ROOT="${LICI_APP_ROOT:-/root/lici-app}"
+APP_ENV="$APP_ROOT/config/lici.env"
+if [[ -f "$APP_ENV" ]]; then
+  # shellcheck disable=SC1090
+  source "$APP_ENV"
+fi
+
+LOG_DIR="$APP_ROOT/health"
 LOG_FILE="$LOG_DIR/healthcheck.log"
-AUDIT_LOG="/root/lici-app/audit/audit.log"
-OBS_LOG_DIR="/root/lici-app/logs"
-NGINX_PUBLIC_URL="https://licitaprobrasil.com/"
-NGINX_RESOLVE="licitaprobrasil.com:443:127.0.0.1"
+AUDIT_LOG="${LICI_AUDIT_LOG:-/root/lici-app/audit/audit.log}"
+OBS_LOG_DIR="${LICI_LOGS_ROOT:-/root/lici-app/logs}"
+NGINX_PUBLIC_URL="${LICI_PUBLIC_URL:-https://licitaprobrasil.com/}"
+NGINX_RESOLVE="${LICI_PUBLIC_DOMAIN:-licitaprobrasil.com}:443:127.0.0.1"
 mkdir -p "$LOG_DIR" "$(dirname "$AUDIT_LOG")" "$OBS_LOG_DIR"
 
 audit_event() {
@@ -34,7 +41,7 @@ structured_log() {
   local status_text="$1"
   local event="$2"
   local details="$3"
-  PYTHONPATH=/root/lici-app/backend /root/lici-app/backend/venv/bin/python - "$status_text" "$event" "$details" <<'PY' || true
+  PYTHONPATH="$APP_ROOT/backend" "$APP_ROOT/backend/venv/bin/python" - "$status_text" "$event" "$details" <<'PY' || true
 import json, sys
 from app.services.observability import structured_log
 status, event, details = sys.argv[1:4]
@@ -120,10 +127,10 @@ status=0
     status=1
   fi
 
-  check_http api_health http://127.0.0.1:8100/health || status=1
-  check_http api_health_full http://127.0.0.1:8100/health/full || status=1
-  check_http memory_core http://127.0.0.1:8010/ || status=1
-  check_http frontend http://127.0.0.1:5173 || status=1
+  check_http api_health "http://${LICI_API_HOST:-127.0.0.1}:${LICI_API_PORT:-8100}/health" || status=1
+  check_http api_health_full "http://${LICI_API_HOST:-127.0.0.1}:${LICI_API_PORT:-8100}/health/full" || status=1
+  check_http memory_core "http://${LICI_MEMORY_HOST:-127.0.0.1}:${LICI_MEMORY_PORT:-8010}/" || status=1
+  check_http frontend "http://${LICI_FRONTEND_HOST:-127.0.0.1}:${LICI_FRONTEND_PORT:-5173}" || status=1
 
   df -h /
   echo "STATUS_FINAL=$([[ $status -eq 0 ]] && echo OK || echo ALERTA)"

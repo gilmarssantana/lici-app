@@ -17,6 +17,7 @@ frontend/dist/
 # Environment and credentials
 .env
 .env.*
+config/lici.env
 *.pem
 *.key
 *.crt
