@@ -22,6 +22,7 @@ class LiciHealthcheckService:
         components.extend(self._json_components())
         components.extend(self._auth_security_components())
         components.append(self._disk_component())
+        components.extend(self._backup_components())
         components.extend(self._postgres_components())
         components.extend(self._log_components())
         components.extend(self._systemd_components())
@@ -247,6 +248,55 @@ class LiciHealthcheckService:
                 components.append(self._component(f"systemd:{unit}", "alerta", f"Não foi possível consultar systemd: {exc}", {"unit": unit}))
         return components
 
+
+    def _backup_components(self) -> list[dict[str, Any]]:
+        backup_dir = Path("/root/backups/lici")
+        pg_dir = backup_dir / "postgres"
+        components = []
+        components.append(self._latest_file_component("backup:archive", backup_dir, "lici-backup-*.tar.gz", max_age_hours=36, min_bytes=1024 * 1024))
+        components.append(self._latest_file_component("backup:postgres_dump", pg_dir, "lici-*.sql.gz", max_age_hours=36, min_bytes=1024))
+        manifest = self._latest_file_component("backup:manifest", backup_dir, "lici-backup-*.manifest.json", max_age_hours=36, min_bytes=100)
+        components.append(manifest)
+        latest_manifest = self._latest_file(backup_dir, "lici-backup-*.manifest.json")
+        if latest_manifest:
+            try:
+                data = json.loads(latest_manifest.read_text(encoding="utf-8"))
+                archive_path = Path(data.get("archive", {}).get("path", ""))
+                pg_path = Path(data.get("postgres_dump", {}).get("path", ""))
+                references_exist = archive_path.exists() and pg_path.exists()
+                components.append(self._component(
+                    "backup:manifest_referencias",
+                    "ok" if references_exist else "erro",
+                    "Manifesto aponta para archive e dump existentes" if references_exist else "Manifesto aponta para arquivo ausente",
+                    {"manifest": str(latest_manifest), "archive": str(archive_path), "postgres_dump": str(pg_path)},
+                ))
+            except Exception as exc:
+                components.append(self._component("backup:manifest_parse", "erro", f"Manifesto inválido: {exc}", {"path": str(latest_manifest)}))
+        return components
+
+    def _latest_file_component(self, name: str, directory: Path, pattern: str, max_age_hours: int, min_bytes: int) -> dict[str, Any]:
+        latest = self._latest_file(directory, pattern)
+        if not latest:
+            return self._component(name, "erro", "Nenhum arquivo encontrado", {"directory": str(directory), "pattern": pattern})
+        stat = latest.stat()
+        age_hours = round((time.time() - stat.st_mtime) / 3600, 2)
+        if stat.st_size < min_bytes:
+            status = "erro"
+            message = f"Arquivo pequeno demais: {stat.st_size} bytes"
+        elif age_hours > max_age_hours:
+            status = "alerta"
+            message = f"Backup antigo: {age_hours}h"
+        else:
+            status = "ok"
+            message = f"Backup recente: {age_hours}h"
+        return self._component(name, status, message, {"path": str(latest), "bytes": stat.st_size, "idade_horas": age_hours})
+
+    def _latest_file(self, directory: Path, pattern: str) -> Path | None:
+        try:
+            files = [path for path in directory.glob(pattern) if path.is_file()]
+        except Exception:
+            return None
+        return max(files, key=lambda path: path.stat().st_mtime) if files else None
 
     def _postgres_components(self) -> list[dict[str, Any]]:
         dsn = os.getenv("LICI_DATABASE_URL")

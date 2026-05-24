@@ -139,6 +139,34 @@ Healthcheck Central:
 
 O healthcheck completo cobre os módulos reais em produção: Radar, Triagem, Alertas, Casos, Scheduler, Fornecedor Full, Consultor Full, Documental 360°, IA Assistiva, Memory Core, Auth e PostgreSQL híbrido. Alertas de segurança, como credencial bootstrap ainda presente, aparecem como `alerta` sem expor conteúdo sensível.
 
+Backup e restauração:
+
+- Timer: `lici-backup.timer` executa diariamente às 03:00.
+- Script: `/root/lici-app/scripts/backup_lici.sh`.
+- Destino local: `/root/backups/lici`.
+- Archive principal: `lici-backup-YYYYmmdd-HHMM.tar.gz`.
+- Dump PostgreSQL: `postgres/lici-YYYYmmdd-HHMM.sql.gz`.
+- Manifesto verificável: `lici-backup-YYYYmmdd-HHMM.manifest.json`, com tamanho e SHA-256 do archive e do dump.
+- Restore seguro: `/root/lici-app/scripts/restore_lici.sh` roda em `dry-run` por padrão.
+
+Exemplo de validação de restore:
+
+```bash
+/root/lici-app/scripts/restore_lici.sh \
+  --archive /root/backups/lici/lici-backup-YYYYmmdd-HHMM.tar.gz \
+  --pg-dump /root/backups/lici/postgres/lici-YYYYmmdd-HHMM.sql.gz
+```
+
+Restauração real exige confirmação explícita:
+
+```bash
+CONFIRM_RESTORE_LICI=YES /root/lici-app/scripts/restore_lici.sh --apply \
+  --archive /root/backups/lici/lici-backup-YYYYmmdd-HHMM.tar.gz \
+  --pg-dump /root/backups/lici/postgres/lici-YYYYmmdd-HHMM.sql.gz
+```
+
+Observação crítica: GitHub protege o código. Backups protegem dados reais, documentos, banco e credenciais locais. Para desastre total da VPS, é necessário copiar `/root/backups/lici` para armazenamento externo seguro.
+
 Persistência documental:
 
 - PostgreSQL: `company_documents`, `company_document_versions`, `company_document_alerts`.

@@ -6,6 +6,7 @@ POSTGRES_BACKUP_DIR="$BACKUP_DIR/postgres"
 STAMP="$(date +%Y%m%d-%H%M)"
 ARCHIVE="$BACKUP_DIR/lici-backup-$STAMP.tar.gz"
 PG_DUMP_FILE="$POSTGRES_BACKUP_DIR/lici-$STAMP.sql.gz"
+MANIFEST="$BACKUP_DIR/lici-backup-$STAMP.manifest.json"
 LOG_FILE="$BACKUP_DIR/backup.log"
 AUDIT_LOG="/root/lici-app/audit/audit.log"
 POSTGRES_ENV="/root/lici-app/secrets/postgres.env"
@@ -31,6 +32,42 @@ event = {
 }
 with open(path, "a", encoding="utf-8") as f:
     f.write(json.dumps(event, ensure_ascii=False) + "\n")
+PY
+}
+
+write_manifest() {
+  python3 - "$ARCHIVE" "$PG_DUMP_FILE" "$MANIFEST" <<'PY'
+import hashlib
+import json
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+archive, pg_dump, manifest = [Path(arg) for arg in sys.argv[1:4]]
+
+def file_info(path: Path) -> dict:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return {
+        "path": str(path),
+        "bytes": path.stat().st_size,
+        "sha256": h.hexdigest(),
+    }
+
+data = {
+    "created_at": datetime.now(timezone.utc).isoformat(),
+    "host": os.uname().nodename,
+    "archive": file_info(archive),
+    "postgres_dump": file_info(pg_dump),
+    "restore_hint": "/root/lici-app/scripts/restore_lici.sh --archive {archive} --pg-dump {pg_dump}",
+    "contains_sensitive_data": True,
+    "sensitive_note": "Backup contém dados operacionais, documentos e segredos locais. Não enviar para Git público.",
+}
+manifest.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+os.chmod(manifest, 0o600)
 PY
 }
 
@@ -125,6 +162,10 @@ done
   chmod 600 "$ARCHIVE"
   echo "Backup criado: $(du -h "$ARCHIVE" | awk '{print $1}')"
 
+  echo "Gerando manifesto verificável..."
+  write_manifest
+  echo "Manifesto criado: $MANIFEST"
+
   mapfile -t old_backups < <(ls -1t "$BACKUP_DIR"/lici-backup-*.tar.gz 2>/dev/null | tail -n +8)
   if (( ${#old_backups[@]} > 0 )); then
     printf 'Removendo backups antigos:\n'
@@ -139,10 +180,18 @@ done
     rm -f "${old_pg_dumps[@]}"
   fi
 
+  mapfile -t old_manifests < <(ls -1t "$BACKUP_DIR"/lici-backup-*.manifest.json 2>/dev/null | tail -n +8)
+  if (( ${#old_manifests[@]} > 0 )); then
+    printf 'Removendo manifestos antigos:\n'
+    printf ' - %s\n' "${old_manifests[@]}"
+    rm -f "${old_manifests[@]}"
+  fi
+
   echo "Backups mantidos: $(ls -1 "$BACKUP_DIR"/lici-backup-*.tar.gz 2>/dev/null | wc -l)"
   echo "Dumps PostgreSQL mantidos: $(ls -1 "$POSTGRES_BACKUP_DIR"/lici-*.sql.gz 2>/dev/null | wc -l)"
+  echo "Manifestos mantidos: $(ls -1 "$BACKUP_DIR"/lici-backup-*.manifest.json 2>/dev/null | wc -l)"
   echo "==== $(date -Is) | LICI backup end ===="
 } >> "$LOG_FILE" 2>&1
 
 audit_event "ok" "backup criado com sucesso"
-structured_log "ok" "backup_run" "{\"arquivo\":\"$ARCHIVE\",\"postgres_dump\":\"$PG_DUMP_FILE\",\"backups_mantidos\":$(ls -1 "$BACKUP_DIR"/lici-backup-*.tar.gz 2>/dev/null | wc -l),\"dumps_postgres_mantidos\":$(ls -1 "$POSTGRES_BACKUP_DIR"/lici-*.sql.gz 2>/dev/null | wc -l)}"
+structured_log "ok" "backup_run" "{\"arquivo\":\"$ARCHIVE\",\"postgres_dump\":\"$PG_DUMP_FILE\",\"manifesto\":\"$MANIFEST\",\"backups_mantidos\":$(ls -1 "$BACKUP_DIR"/lici-backup-*.tar.gz 2>/dev/null | wc -l),\"dumps_postgres_mantidos\":$(ls -1 "$POSTGRES_BACKUP_DIR"/lici-*.sql.gz 2>/dev/null | wc -l),\"manifestos_mantidos\":$(ls -1 "$BACKUP_DIR"/lici-backup-*.manifest.json 2>/dev/null | wc -l)}"
