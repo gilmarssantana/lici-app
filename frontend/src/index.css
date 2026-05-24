@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #050b16;
+  color: #e8f0fb;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% -8%, rgba(59, 130, 246, 0.24), transparent 34rem),
+    radial-gradient(circle at 88% 8%, rgba(14, 165, 233, 0.12), transparent 28rem),
+    radial-gradient(circle at 70% 105%, rgba(20, 184, 166, 0.10), transparent 32rem),
+    linear-gradient(180deg, #07111f 0%, #050b16 48%, #030712 100%);
+  overflow-x: hidden;
+}
+
+button, input, select, textarea {
+  font: inherit;
+}
+
+button, a, input, select, textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  background: rgba(59, 130, 246, 0.35);
+  color: #f8fafc;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.55);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.72);
+  border: 2px solid rgba(15, 23, 42, 0.55);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(96, 165, 250, 0.70);
+}
+
+.card {
+  @apply rounded-3xl border border-white/10 bg-slate-950/55 shadow-2xl shadow-black/20 backdrop-blur-xl;
+  background-image: linear-gradient(180deg, rgba(30, 41, 59, 0.58), rgba(2, 6, 23, 0.42));
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold tracking-wide shadow-sm shadow-black/10;
+}
+
+.input {
+  @apply rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-slate-100 outline-none shadow-inner shadow-black/20 ring-blue-400/20 transition placeholder:text-slate-600 hover:border-slate-500/70 focus:border-blue-300/70 focus:ring-4;
+}
+
+.table-row {
+  @apply border-b border-white/5 transition last:border-b-0 hover:bg-white/[0.035];
+}
+
+.mobile-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+.premium-button {
+  @apply inline-flex items-center justify-center rounded-2xl border border-white/10 bg-slate-800/90 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-black/15 transition hover:border-blue-300/40 hover:bg-slate-700 active:scale-[0.99] disabled:opacity-60;
+}
+
+.premium-button-primary {
+  @apply inline-flex items-center justify-center rounded-2xl border border-blue-300/20 bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-blue-950/35 transition hover:bg-blue-500 active:scale-[0.99] disabled:opacity-60;
+}
+
+
+.crud-action-bar {
+  @apply flex flex-wrap items-center gap-2 rounded-2xl border border-blue-400/20 bg-blue-500/10 p-3 shadow-lg shadow-blue-950/20;
+}
+
+.crud-action-label {
+  @apply mr-1 text-[11px] font-black uppercase tracking-[0.18em] text-blue-200;
+}
+
+.crud-button {
+  @apply inline-flex items-center justify-center rounded-xl border border-white/10 bg-slate-800 px-3 py-2 text-xs font-black text-white shadow-sm shadow-black/20 transition hover:border-blue-300/35 hover:bg-slate-700 active:scale-[0.99] disabled:opacity-60;
+}
+
+.crud-button-primary {
+  @apply inline-flex items-center justify-center rounded-xl border border-blue-300/30 bg-blue-600 px-3 py-2 text-xs font-black text-white shadow-sm shadow-blue-950/30 transition hover:bg-blue-500 active:scale-[0.99] disabled:opacity-60;
+}
+
+.crud-button-success {
+  @apply inline-flex items-center justify-center rounded-xl border border-emerald-300/25 bg-emerald-600 px-3 py-2 text-xs font-black text-white shadow-sm shadow-emerald-950/25 transition hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-60;
+}
+
+.crud-button-warning {
+  @apply inline-flex items-center justify-center rounded-xl border border-orange-300/25 bg-orange-600 px-3 py-2 text-xs font-black text-white shadow-sm shadow-orange-950/25 transition hover:bg-orange-500 active:scale-[0.99] disabled:opacity-60;
+}
+
+.sticky-actions {
+  @apply sticky right-0 z-10 border-l border-white/10 bg-slate-950/95 shadow-[-18px_0_28px_rgba(2,6,23,0.75)] backdrop-blur-xl;
+}
+
+.focus-premium {
+  @apply outline-none ring-blue-400/20 transition focus:ring-4;
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: rgba(30, 41, 59, 0.72);
+}
+
+.skeleton-shimmer::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.18), transparent);
+  animation: shimmer 1.55s infinite;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 640px) {
+  .card {
+    @apply rounded-2xl;
+  }
+
+  table th,
+  table td {
+    @apply whitespace-nowrap;
+  }
+
+  .badge {
+    @apply text-[11px];
+  }
+
+  .input {
+    @apply rounded-xl px-3 py-2.5;
+  }
+}

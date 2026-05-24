@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+backend/venv
+
+# Node / frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.vite/
+
+# Environment and credentials
+.env
+.env.*
+*.pem
+*.key
+*.crt
+.lici_basic_auth_credentials
+auth/
+secrets/
+
+# Runtime logs and generated files
+*.log
+logs/
+audit/
+health/
+storage/
+backend.log
+
+# LICI runtime data containing operational/client information
+alertas/
+casos_vivos/
+chat/
+company_documents/
+concorrentes/
+consultor/
+consultor_full/
+fornecedor_full/
+ia_assistiva/
+memoria_viva/
+notificacoes/
+organizations/
+orgaos/
+perfis/
+radar/
+scheduler/
+triagem/
+
+# Backups and local dumps
+backups/
+*.bak
+*.bak.*
+*.backup
+*.dump
+*.sql
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
