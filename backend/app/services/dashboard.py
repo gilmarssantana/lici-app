@@ -74,6 +74,52 @@ class LiciDashboardService:
             "risco_concorrencial": risco_concorrencial,
         }
 
+    def comando_operacional(self, organization_id: str | None = None, user: dict[str, Any] | None = None) -> dict[str, Any]:
+        oportunidades = self._oportunidades()
+        if organization_id:
+            oportunidades = [item for item in oportunidades if (getattr(item, "organization_id", None) or "default-org") == organization_id]
+        triagem = self._triagem()
+        alertas = self._alertas()
+        casos = self._casos(organization_id=organization_id)
+        memorias = self._memorias(organization_id=organization_id)
+
+        acoes = []
+        acoes.extend(self._acoes_de_alertas(alertas))
+        acoes.extend(self._acoes_de_casos(casos))
+        acoes.extend(self._acoes_de_prazos(oportunidades, triagem))
+        acoes.extend(self._acoes_de_oportunidades(oportunidades, triagem))
+        acoes.extend(self._acoes_de_concorrencia(casos))
+        acoes.extend(self._acoes_de_memoria(memorias))
+
+        acoes = sorted(acoes, key=lambda item: (item["prioridade"], item.get("score", 0)), reverse=True)
+        foco = acoes[0] if acoes else {
+            "id": "sem-acao",
+            "tipo": "operação estável",
+            "titulo": "Nenhuma ação crítica detectada agora",
+            "diagnostico": "Os módulos não indicaram prazo crítico, alerta aberto ou caso ativo pendente.",
+            "acao": "Revisar oportunidades novas no Radar e manter documentos de habilitação atualizados.",
+            "modulo": "Radar",
+            "navegar_para": "oportunidades",
+            "prioridade": 10,
+            "criticidade": "baixa",
+            "score": 0,
+        }
+        return {
+            "nome": "LICI Comando Operacional",
+            "objetivo": "Transformar dados internos em decisão prática do dia.",
+            "organizacao": (organization_id or "default-org"),
+            "usuario": (user or {}).get("usuario"),
+            "total_acoes": len(acoes),
+            "foco_do_dia": foco,
+            "acoes": acoes[:12],
+            "controles": {
+                "alertas_abertos": sum(1 for alerta in alertas if not alerta.lido),
+                "casos_ativos": sum(1 for caso in casos if caso.status in {"ativo", "suspenso"}),
+                "prazos_15_dias": len(self._proximos_prazos(oportunidades, triagem, limit=1000)),
+                "memorias_total": len(memorias),
+            },
+        }
+
     def oportunidades(self, organization_id: str | None = None) -> dict[str, Any]:
         oportunidades = self._oportunidades()
         if organization_id:
@@ -326,3 +372,150 @@ class LiciDashboardService:
         if total <= 0:
             return 0.0
         return round((parte / total) * 100, 2)
+
+    def _acao(self, *, source: str, ref: str, tipo: str, titulo: str, diagnostico: str, acao: str, modulo: str, navegar_para: str, prioridade: int, criticidade: str, score: int = 0, prazo: str = "") -> dict[str, Any]:
+        return {
+            "id": f"{source}:{ref}",
+            "referencia_id": ref,
+            "tipo": tipo,
+            "titulo": titulo,
+            "diagnostico": diagnostico,
+            "acao": acao,
+            "modulo": modulo,
+            "navegar_para": navegar_para,
+            "prioridade": max(0, min(100, prioridade)),
+            "criticidade": criticidade,
+            "score": max(0, min(100, int(score or 0))),
+            "prazo": prazo,
+        }
+
+    def _acoes_de_alertas(self, alertas: list[AlertRecord]) -> list[dict[str, Any]]:
+        out = []
+        for alerta in alertas:
+            if alerta.lido:
+                continue
+            prioridade = {"critica": 96, "alta": 84, "media": 62, "baixa": 38}.get(alerta.severidade, 45)
+            out.append(self._acao(
+                source="alerta",
+                ref=alerta.id,
+                tipo="alerta aberto",
+                titulo=alerta.titulo,
+                diagnostico=alerta.mensagem,
+                acao=alerta.acao_recomendada or "Abrir alerta, validar causa e registrar providência.",
+                modulo="Alertas",
+                navegar_para="dashboard",
+                prioridade=prioridade,
+                criticidade=alerta.severidade,
+                score=prioridade,
+            ))
+        return out
+
+    def _acoes_de_casos(self, casos: list[CaseRecord]) -> list[dict[str, Any]]:
+        out = []
+        for caso in casos:
+            if caso.status not in {"ativo", "suspenso"}:
+                continue
+            prioridade = max(40, min(92, int(caso.score_estrategico or 50)))
+            if caso.fase_atual in {"impugnação", "habilitação", "disputa", "recurso"}:
+                prioridade += 8
+            if any("prazo" in risco.casefold() or "inabilitação" in risco.casefold() for risco in caso.riscos):
+                prioridade += 8
+            out.append(self._acao(
+                source="caso",
+                ref=caso.id,
+                tipo="caso vivo",
+                titulo=f"{caso.orgao} - {caso.fase_atual}",
+                diagnostico=caso.objeto,
+                acao=self._acao_caso(caso),
+                modulo="Casos",
+                navegar_para="casos",
+                prioridade=prioridade,
+                criticidade="alta" if prioridade >= 75 else "media",
+                score=caso.score_estrategico,
+            ))
+        return out
+
+    def _acoes_de_prazos(self, oportunidades: list[RadarOpportunity], triagem: list[TriageItem]) -> list[dict[str, Any]]:
+        out = []
+        for prazo in self._proximos_prazos(oportunidades, triagem, limit=20):
+            dias = prazo["dias_ate_encerramento"]
+            if dias < 0:
+                continue
+            prioridade = 95 if dias <= 1 else 86 if dias <= 3 else 72 if dias <= 7 else 55
+            out.append(self._acao(
+                source="prazo",
+                ref=prazo["oportunidade_id"],
+                tipo="prazo próximo",
+                titulo=f"{prazo['orgao']} - encerra em {dias} dia(s)",
+                diagnostico=prazo["objeto"],
+                acao="Decidir agora: criar caso, descartar ou pedir esclarecimento. Prazo curto não combina com análise solta.",
+                modulo="Oportunidades",
+                navegar_para="oportunidades",
+                prioridade=prioridade,
+                criticidade=prazo["severidade_sugerida"],
+                score=prazo["score_preliminar"],
+                prazo=prazo["data_encerramento"],
+            ))
+        return out
+
+    def _acoes_de_oportunidades(self, oportunidades: list[RadarOpportunity], triagem: list[TriageItem]) -> list[dict[str, Any]]:
+        triagem_por_id = {item.oportunidade_id: item for item in triagem}
+        out = []
+        for oportunidade in sorted(oportunidades, key=lambda item: item.score_preliminar, reverse=True)[:12]:
+            triage = triagem_por_id.get(oportunidade.id)
+            if oportunidade.caso_id or (triage and triage.classificacao not in {"prioridade_alta", "analisar"}):
+                continue
+            if oportunidade.score_preliminar < 55 and (not triage or triage.classificacao != "prioridade_alta"):
+                continue
+            prioridade = min(88, int(oportunidade.score_preliminar) + (12 if triage and triage.classificacao == "prioridade_alta" else 0))
+            out.append(self._acao(
+                source="oportunidade",
+                ref=oportunidade.id,
+                tipo="oportunidade sem caso",
+                titulo=oportunidade.orgao or "Órgão não informado",
+                diagnostico=oportunidade.objeto,
+                acao="Converter em caso vivo se houver aderência mínima; se não houver, registrar motivo do descarte para limpar a fila.",
+                modulo="Oportunidades",
+                navegar_para="oportunidades",
+                prioridade=prioridade,
+                criticidade="alta" if prioridade >= 75 else "media",
+                score=oportunidade.score_preliminar,
+                prazo=oportunidade.data_encerramento,
+            ))
+        return out
+
+    def _acoes_de_concorrencia(self, casos: list[CaseRecord]) -> list[dict[str, Any]]:
+        out = []
+        for risco in self._risco_concorrencial_dashboard(casos)[:8]:
+            score = int(risco["risco_concorrencial_score"])
+            out.append(self._acao(
+                source="concorrencia",
+                ref=risco["id"],
+                tipo="risco concorrencial",
+                titulo=f"{risco['orgao']} - {len(risco['concorrentes_relevantes'])} concorrente(s)",
+                diagnostico=risco["objeto"],
+                acao=risco["acao_recomendada"],
+                modulo="Concorrentes",
+                navegar_para="concorrentes",
+                prioridade=min(90, 50 + round(score / 2)),
+                criticidade="alta" if score >= 65 else "media",
+                score=score,
+            ))
+        return out
+
+    def _acoes_de_memoria(self, memorias) -> list[dict[str, Any]]:
+        if memorias:
+            return []
+        return [self._acao(
+            source="memoria",
+            ref="primeiro-registro",
+            tipo="memória vazia",
+            titulo="Memória viva sem registros úteis para esta organização",
+            diagnostico="Sem memória, a LICI perde aprendizado sobre órgãos, teses, concorrentes, vitórias e perdas.",
+            acao="Registrar o primeiro padrão operacional relevante após análise, vitória, perda, impugnação ou recurso.",
+            modulo="Memória",
+            navegar_para="ia-assistiva",
+            prioridade=35,
+            criticidade="baixa",
+            score=0,
+        )]

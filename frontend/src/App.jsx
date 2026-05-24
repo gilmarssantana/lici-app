@@ -893,6 +893,7 @@ function LiciChatBubble({ msg }) {
 
 function Dashboard({ profile, onNavigate }) {
   const { data, loading, error, refresh } = useAsyncData(loadDashboardCommandCenter)
+  const comando = data?.comando || {}
   const resumo = data?.resumo || {}
   const totals = resumo?.totais || {}
   const kpis = data?.kpis || {}
@@ -910,6 +911,7 @@ function Dashboard({ profile, onNavigate }) {
   return (
     <StateGate loading={loading} error={error} onRetry={refresh}>
       <div className="space-y-6">
+        <CommandBoard comando={comando} onNavigate={onNavigate} />
         
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <KpiCard title="Oportunidades prioritárias" value={prioridadeAlta.length} icon={Target} hint="Itens que merecem decisão hoje" />
@@ -1094,7 +1096,8 @@ function GuidedWorkflow({ profile, onNavigate }) {
 }
 
 async function loadDashboardCommandCenter() {
-  const [resumo, kpis, alertas, audit, oportunidades, casos, gerados] = await Promise.all([
+  const [comando, resumo, kpis, alertas, audit, oportunidades, casos, gerados] = await Promise.all([
+    api.dashboardComando(),
     api.dashboardResumo(),
     api.dashboardKpis(),
     api.alertas(),
@@ -1103,7 +1106,57 @@ async function loadDashboardCommandCenter() {
     api.dashboardCasos(),
     api.documentosGerados(),
   ])
-  return { resumo, kpis, alertas, audit, oportunidades, casos, gerados }
+  return { comando, resumo, kpis, alertas, audit, oportunidades, casos, gerados }
+}
+
+function CommandBoard({ comando, onNavigate }) {
+  const foco = comando?.foco_do_dia
+  const acoes = comando?.acoes || []
+  if (!foco) return null
+  return (
+    <Section
+      title="Comando operacional"
+      subtitle="A LICI escolhe o foco do dia a partir dos dados reais. Comece por aqui."
+      action={<button onClick={() => onNavigate?.(foco.navegar_para || 'dashboard')} className="crud-button-primary"><Target size={14} className="mr-1.5" />Abrir foco</button>}
+    >
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+        <button onClick={() => onNavigate?.(foco.navegar_para || 'dashboard')} className="rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-5 text-left transition hover:border-emerald-300/60 hover:bg-emerald-500/15">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge value={foco.tipo || 'foco'} />
+            <Badge value={foco.criticidade || 'média'} />
+            <span className="text-xs font-bold text-emerald-100/80">prioridade {foco.prioridade ?? 0}/100</span>
+          </div>
+          <h3 className="mt-3 text-2xl font-black text-white">{foco.titulo}</h3>
+          <p className="mt-3 text-sm leading-6 text-emerald-50/85">{foco.diagnostico}</p>
+          <div className="mt-4 rounded-xl border border-emerald-300/20 bg-slate-950/45 p-4">
+            <p className="text-xs font-black uppercase tracking-wide text-emerald-200">Próximo movimento</p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-white">{foco.acao}</p>
+          </div>
+        </button>
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/45 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-wide text-slate-500">Fila objetiva</p>
+              <p className="mt-1 text-sm text-slate-400">{comando.total_acoes || 0} ação(ões) detectada(s)</p>
+            </div>
+            <Badge value={comando.organizacao || 'default-org'} />
+          </div>
+          <div className="mt-4 space-y-3">
+            {acoes.slice(0, 4).map((item) => (
+              <button key={item.id} onClick={() => onNavigate?.(item.navegar_para || 'dashboard')} className="w-full rounded-xl border border-slate-800 bg-slate-900/55 p-3 text-left transition hover:border-blue-400/40">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-black uppercase tracking-wide text-blue-200">{item.modulo}</span>
+                  <span className="text-xs text-slate-500">{item.prioridade}/100</span>
+                </div>
+                <p className="mt-1 line-clamp-1 text-sm font-bold text-white">{item.titulo}</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">{item.acao}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Section>
+  )
 }
 
 function RecommendedActions({ alertas, oportunidades, casos, riscosConcorrenciais = [] }) {

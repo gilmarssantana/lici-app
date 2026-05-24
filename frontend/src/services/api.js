@@ -103,6 +103,7 @@ export const api = {
   trocarOrganizacao: (organizationId) => request('/organizacoes/trocar', { method: 'POST', body: JSON.stringify({ organization_id: organizationId }) }),
   login: (payload) => request('/auth/login', { method: 'POST', body: JSON.stringify(payload || {}) }),
   me: () => request('/auth/me'),
+  dashboardComando: () => request('/dashboard/comando'),
   dashboardResumo: () => request('/dashboard/resumo'),
   dashboardOportunidades: () => request('/dashboard/oportunidades'),
   dashboardCasos: () => request('/dashboard/casos'),
@@ -232,5 +233,4 @@ export const api = {
   iaAssistivaFeedback: (payload) => request('/ia-assistiva/feedback', { method: 'POST', body: JSON.stringify(payload || {}) }),
   iaAssistivaTelemetria: () => request('/ia-assistiva/telemetria'),
 }
-
 

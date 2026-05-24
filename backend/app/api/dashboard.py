@@ -14,6 +14,11 @@ def resumo(user: dict = Depends(require_permission("dados:ler"))) -> dict:
     return dashboard.resumo(organization_id=user.get("active_organization_id") or user.get("organization_id"), user=user)
 
 
+@router.get("/comando")
+def comando(user: dict = Depends(require_permission("dados:ler"))) -> dict:
+    return dashboard.comando_operacional(organization_id=user.get("active_organization_id") or user.get("organization_id"), user=user)
+
+
 @router.get("/oportunidades")
 def oportunidades(user: dict = Depends(require_permission("dados:ler", "radar:ler"))) -> dict:
     return dashboard.oportunidades(organization_id=user.get("active_organization_id") or user.get("organization_id"))
