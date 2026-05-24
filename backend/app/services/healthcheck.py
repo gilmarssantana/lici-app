@@ -212,6 +212,26 @@ class LiciHealthcheckService:
                     {"path": str(bootstrap)},
                 )
             )
+        recovery = Path("/root/lici-app/auth/admin_recovery_credentials")
+        if recovery.exists():
+            mode = recovery.stat().st_mode & 0o777
+            components.append(
+                self._component(
+                    "auth:admin_recovery_credentials",
+                    "alerta",
+                    "Credencial de recuperação admin existe; usar para login, rotacionar e remover depois.",
+                    {"path": str(recovery), "modo": oct(mode)},
+                )
+            )
+        else:
+            components.append(
+                self._component(
+                    "auth:admin_recovery_credentials",
+                    "ok",
+                    "Credencial de recuperação admin ausente.",
+                    {"path": str(recovery)},
+                )
+            )
         return components
 
     def _systemd_components(self) -> list[dict[str, Any]]:

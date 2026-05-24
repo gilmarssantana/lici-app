@@ -233,6 +233,19 @@ Observações:
 - Depois do bootstrap, criação/listagem/alteração/desativação exigem usuário `admin` via Bearer token.
 - A próxima etapa é proteger gradualmente os endpoints operacionais por permissão.
 
+Recuperação de acesso admin:
+
+- Script seguro: `/root/lici-app/scripts/reset_admin_password.py`.
+- Uso padrão:
+
+```bash
+/root/lici-app/scripts/reset_admin_password.py --usuario liciadmin --remove-bootstrap
+```
+
+- A senha gerada é salva somente em `/root/lici-app/auth/admin_recovery_credentials`, com permissão `600`.
+- O arquivo de recuperação não é versionado no Git e deve ser removido após login e rotação segura da senha.
+- `GET /health/full` alerta enquanto `admin_recovery_credentials` existir.
+
 ## Login JWT no Frontend
 
 O frontend React já possui tela de login da LICI integrada ao Auth Engine.
